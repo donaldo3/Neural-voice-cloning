@@ -138,7 +138,8 @@ hparams = hparam_tf.hparam.HParams(
     process_only_htk_aligned=False,
     not_for_train_speaker="300, 301, 302, 303, 304, 305",
     vocoder="world",
-    converter_dim=187 # fft_size//2 + 1 for linear spec when using Griffin-Lim vocoder
+    converter_dim=187, # fft_size//2 + 1 for linear spec when using Griffin-Lim vocoder
+    cloning_sample_size=4
 )
 
 

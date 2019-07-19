@@ -332,3 +332,6 @@ def test_incremental_forward():
         _plot(mel, c, alignments)
 
     _plot(mel, mel_outputs, alignments)
+
+if __name__ == "__main__":
+    test_incremental_correctness()

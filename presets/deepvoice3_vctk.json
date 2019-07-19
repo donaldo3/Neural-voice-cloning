@@ -64,5 +64,6 @@
   "power": 1.4,
   "not_for_train_speaker": "300, 301, 302, 303, 304, 305",
   "vocoder": "world",
-  "converter_dim": 187
+  "converter_dim": 187,
+  "cloning_sample_size": 4
 }
