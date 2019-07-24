@@ -68,8 +68,8 @@ if __name__ == "__main__":
     data_loader = data_utils.DataLoader(
         dataset, batch_size=hparams.batch_size, collate_fn=collate_fn,
         num_workers=hparams.num_workers,
-        pin_memory=hparams.pin_memory
+        pin_memory=False
     )
 
-    for step, (mel, speaker_ids) in tqdm(enumerate(data_loader)):
+    for step, (mel, speaker_embeds) in tqdm(enumerate(data_loader)):
         print("")

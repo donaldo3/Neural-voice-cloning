@@ -68,6 +68,10 @@ use_cuda = torch.cuda.is_available()
 if use_cuda:
     cudnn.benchmark = False
 
+def _pad(seq, max_len, constant_values=0):
+    return np.pad(seq, ((0, max_len - len(seq)), (0, 0)),
+                  mode='constant', constant_values=constant_values)
+
 def train(device, model, data_loader, optimizer, writer,
           init_lr = 0.002,
           checkpoint_dir=None, checkpoint_interval=None, nepochs=None,
@@ -145,8 +149,20 @@ class SpeakerDataSet(Dataset):
     def __len__(self):
         return len(self.mel_spec_datasource_list)
 
+# Return mel spectrogram (b, T, F) from x[0]
+def collate_fn_sub(batch):
+    # Try not to downsample or anything at first implementation. Refrain from using tricks
+    # Speaker encoder is non-causal filter. No autoregressive decoder.
+    # Thus no position, no pad at the beginning, no alignment
+    # Pad to match the max target length before stacking samples into a batch ndarray
+    target_lengths = [len(x) for x in batch] # Frame length
+    max_target_len = max(target_lengths)
+    b = np.array([_pad(x, max_target_len) for x in batch])
+    mel_batch = torch.FloatTensor(b)
+    return mel_batch
+
 '''
-Return 4D mel sectrogram and speaker embedding from TTS expanded into 4D
+Return 4D mel sectrogram and speaker embedding from TTS 
 '''
 def collate_fn(batch):
     # Randomly sample N_sample audios from x[0]
@@ -154,21 +170,46 @@ def collate_fn(batch):
     # TODO: frame length padding
     mels = []
     for x in batch:
-        dataset = x[0]
+        dataset = x[0] # MelSpecDataSource
+
+        # Call MelSpecDataSource.__getitem__() and randomly sample batch size of hparams.cloning_sample_size
+        # without creating DataLoader object
+        # Or what if DataLoader does not create worker thread for num_workders=0?
         frame_lengths = dataset.file_data_source.frame_lengths
         sampler = PartialyRandomizedSimilarTimeLengthSampler(frame_lengths, batch_size=hparams.cloning_sample_size)
 
         data_loader = data_utils.DataLoader(
             dataset, batch_size=hparams.cloning_sample_size,
-            num_workers=hparams.num_workers, sampler=sampler,
-            collate_fn=collate_fn_sub, pin_memory=hparams.pin_memory
+            num_workers=0, sampler=sampler,
+            collate_fn=collate_fn_sub, pin_memory=False
         )
-        audios = enumerate(data_loader)
-        audios = audios.tolist() # type matching process. not sure about this.
-        mels.append(audios)
-    # Expand speaker embeddings into 3D to match the frame length of chosen samples in batch
-    speaker_embeds = torch.LongTensor([x[1] for x in batch])
-    return mels, speaker_embeds
+
+        # Create list
+        cloning_samples = []
+        for i, audio in enumerate(data_loader):
+            audio = audio.numpy()
+            break
+
+        mels.append(audio)
+
+    # Match the length among speakers
+    target_lengths = [len(x[0]) for x in mels]
+    max_target_len = max(target_lengths)
+    padded_mels = []
+    # Match the max length for each speaker batch
+    for i in range(len(mels)):
+        padded_mels_sub = []
+        for j in range(len(mels[i])):
+            sample = _pad(mels[i][j], max_target_len)
+            padded_mels_sub.append(sample)
+        padded_mels_sub = np.stack(padded_mels_sub, axis=0)
+        padded_mels.append(padded_mels_sub)
+    padded_mels = np.stack(padded_mels, axis=0)
+    padded_mels = torch.FloatTensor(padded_mels)
+    # TODO: 3D or 2D for speaker embedding?
+    speaker_embeds = torch.stack([x[1] for x in batch])
+    speaker_embeds = speaker_embeds.detach()
+    return padded_mels, speaker_embeds
 
 class PyTorchDataset(Dataset):
     def __init__(self, speaker_data_source, tts_checkpoint_path):
@@ -224,14 +265,13 @@ if __name__ == "__main__":
 
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    # TODO: Add collate_fn argument
     speaker_dataset = SpeakerDataSet(vctk_root, data_root)
     dataset = PyTorchDataset(speaker_dataset, checkpoint_multispeaker_tts)
     data_loader = data_utils.DataLoader(
         dataset, batch_size=hparams.batch_size,
         num_workers=hparams.num_workers,
         collate_fn=collate_fn,
-        pin_memory=hparams.pin_memory
+        pin_memory=False
     )
     device = torch.device("cuda" if use_cuda else "cpu")
     model = SpeakerEncoder(hparams.encoder_channels, hparams.kernel_size)

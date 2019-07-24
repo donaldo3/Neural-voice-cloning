@@ -366,16 +366,18 @@ def collate_fn(batch):
         assert max_target_len % downsample_step == 0
 
     # Set 0 for zero beginning padding
-    # imitates initial decoder states
+    # imitates initial decoder states: input at autoregressive inference time
     b_pad = r
     max_target_len += b_pad * downsample_step
 
+    # Pad only at the end for the text input
     a = np.array([_pad(x[0], max_input_len) for x in batch], dtype=np.int)
     x_batch = torch.LongTensor(a)
 
     input_lengths = torch.LongTensor(input_lengths)
     target_lengths = torch.LongTensor(target_lengths)
 
+    # Pad at the beginning and the end for mel and linear spec
     b = np.array([_pad_2d(x[1], max_target_len, b_pad=b_pad) for x in batch],
                  dtype=np.float32)
     mel_batch = torch.FloatTensor(b)
@@ -392,7 +394,7 @@ def collate_fn(batch):
     # text positions
     text_positions = np.array([_pad(np.arange(1, len(x[0]) + 1), max_input_len)
                                for x in batch], dtype=np.int)
-    text_positions = torch.LongTensor(text_positions)
+    text_positions = torch.LongTensor(text_positions) # Text positions are [1, ..., len, 0,...,0] and differs for all samples in a batch
 
     max_decoder_target_len = max_target_len // r // downsample_step
 
@@ -401,8 +403,8 @@ def collate_fn(batch):
     # if b_pad > 0:
     #    s, e = s - 1, e - 1
     frame_positions = torch.arange(s, e).long().unsqueeze(0).expand(
-        len(batch), max_decoder_target_len)
-
+        len(batch), max_decoder_target_len) # Frame positionps are [1, ..., max_len] for all samples
+                                            # Done flag represents null frames at the end.
     # done flags
     done = np.array([_pad(np.zeros(len(x[1]) // r // downsample_step - 1),
                           max_decoder_target_len, constant_values=1)
