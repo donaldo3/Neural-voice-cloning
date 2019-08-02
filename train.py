@@ -916,7 +916,7 @@ def _load(checkpoint_path):
     return checkpoint
 
 
-def load_checkpoint(path, model, optimizer, reset_optimizer):
+def load_checkpoint(path, model, optimizer, reset_optimizer=False):
     global global_step
     global global_epoch
 

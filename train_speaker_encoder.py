@@ -24,7 +24,7 @@ options:
     -h, --help                      Show this help message and exit
 
 '''
-from train import collate_fn as collate_fn_sub
+from train import collate_fn as collate_fn_sub, load_checkpoint
 from train import PartialyRandomizedSimilarTimeLengthSampler
 from docopt import docopt
 from deepvoice3_pytorch.modules import Embedding
@@ -47,6 +47,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils import data as data_utils
 from torch.utils.data.sampler import Sampler
 import numpy as np
+from speaker_encoder import SpeakerEncoder
 from numba import jit
 
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
@@ -72,19 +73,32 @@ def _pad(seq, max_len, constant_values=0):
     return np.pad(seq, ((0, max_len - len(seq)), (0, 0)),
                   mode='constant', constant_values=constant_values)
 
+def save_checkpoint(model, optimizer, step, checkpoint_dir, epoch):
+    suffix = "_speaker_encoder"
+    checkpoint_path = join(
+        checkpoint_dir, "checkpoint_step{:09d}{}.pth".format(global_step, suffix)
+    )
+    optimizer_state = optimizer.state_dict() if hparams.save_optimizer_state else None
+    torch.save({
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer_state,
+        "global_step": step,
+        "global_epoch": epoch
+    }, checkpoint_path)
+    print("Saved checkpoint:", checkpoint_path)
+
 def train(device, model, data_loader, optimizer, writer,
           init_lr = 0.002,
-          checkpoint_dir=None, checkpoint_interval=None, nepochs=None,
+          checkpoint_dir=None, checkpoint_interval=10000, nepochs=None,
           clip_thresh=1.0):
     current_lr = init_lr
     MSELoss = nn.MSELoss()
 
-    global globa_step, global_epoch
+    global global_step, global_epoch
     while global_epoch < nepochs:
         running_loss = 0.
-        for step, (mel, speaker_ids) in tqdm(enumerate(data_loader)):
+        for step, (mel, tts_embeddings) in tqdm(enumerate(data_loader)):
             model.train()
-            ismultispeaker = speaker_ids is not None
 
             # Learning rate schedule
             if hparams.lr_schedule is not None:
@@ -94,11 +108,55 @@ def train(device, model, data_loader, optimizer, writer,
                     param_group['lr'] = current_lr
             optimizer.zero_grad()
 
-            if downsample_step > 1:
-                mel = mel[:, 0::downsample_step, :].contiguous()
+            # Downsample if necessary
+            # if downsample_step > 1:
+            #     mel = mel[:, 0::downsample_step, :].contiguous()
+
+            # Change into 3D
+            size = mel.size()
+            mel = mel.view(size[0] * size[1], size[2], size[3])
+
+
+            # Transform data to CUDA device
+            mel = mel.to(device)
+            tts_embeddings = tts_embeddings.to(device)
+
+            # Apply model
+            pred_speaker_embeddings = model(mel)
 
             # L2 Loss with embeddings from generative model
-            loss = MSELoss(pred_embedding, tts_embedding)
+            loss = MSELoss(pred_speaker_embeddings, tts_embeddings.squeeze())
+
+            # Update
+            loss.backward()
+            if clip_thresh > 0:
+                grad_norm = torch. nn.utils.clip_grad_norm_(
+                    model.parameters(), clip_thresh
+                )
+                optimizer.step()
+
+            # Logs
+            writer.add_scalar("loss", float(loss.item()), global_step)
+
+            if clip_thresh > 0:
+                writer.add_scalar("gradient norm", grad_norm, global_step)
+            writer.add_scalar("learning rate", current_lr, global_step)
+
+            global_step += 1
+            running_loss += loss.item()
+
+            # Save checkpoint
+            # TODO: check checkpoint saving indentation
+            if global_step > 0 and global_step % checkpoint_interval == 0:
+                save_checkpoint(
+                    model, optimizer, global_step, checkpoint_dir, global_epoch
+                )
+
+
+        averaged_loss = running_loss / (len(data_loader))
+        writer.add_scalar("loss (per epoch)", averaged_loss, global_epoch)
+        print("Loss: {}".format(running_loss/(len(data_loader))))
+        global_epoch += 1
 
 def _load(checkpoint_path):
     if use_cuda:
@@ -241,11 +299,14 @@ if __name__ == "__main__":
     checkpoint_dir = args["--checkpoint-dir"]
     checkpoint_path = args["--checkpoint"]
     checkpoint_multispeaker_tts = args["--checkpoint-multispeaker-tts"]
+    checkpoint = args["--checkpoint"]
     load_embedding = args["--load-embedding"]
     preset = args["--preset"]
     vctk_root = args["--vctk-root"]
     data_root = args["--data-root"]
     preset = args["--preset"]
+    reset_optimizer = args["--reset-optimizer"]
+
     # Load preset if specified
     if preset is not None:
         with open(preset) as f:
@@ -255,13 +316,6 @@ if __name__ == "__main__":
     # What if cmp is also used as feature to extract speaker embedding? I think i'd like that
 
     print("Training speaker encoder model")
-
-    # Load preset if specified
-    if preset is not None:
-        with open(preset) as f:
-            hparams.parse_json(f.read())
-    # Override hyper parameters
-    hparams.parse(args["--hparams"])
 
     os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -274,12 +328,25 @@ if __name__ == "__main__":
         pin_memory=False
     )
     device = torch.device("cuda" if use_cuda else "cpu")
-    model = SpeakerEncoder(hparams.encoder_channels, hparams.kernel_size)
-    optimizer = optim.Adam(model.get_trainable_parameters(),
+    model = SpeakerEncoder(hparams.num_mels, hparams.encoder_channels, hparams.kernel_size,
+                           hparams.f_mapped, hparams.speaker_embed_dim,
+                           hparams.speaker_encoder_attention_num_heads,
+                           hparams.speaker_encoder_attention_dim,
+                           hparams.dropout,
+                           hparams.batch_size,
+                           hparams.cloning_sample_size)
+    optimizer = optim.Adam(model.parameters(),
                            lr=hparams.initial_learning_rate, betas=(
         hparams.adam_beta1, hparams.adam_beta2),
         eps=hparams.adam_eps, weight_decay=hparams.weight_decay,
         amsgrad=hparams.amsgrad)
+
+    if device.type != "cpu":
+        model.cuda()
+
+    if checkpoint is not None:
+        model = load_checkpoint(checkpoint, model, optimizer, reset_optimizer)
+
     if log_event_path is None:
         if platform.system() == "Windows":
             log_event_path = "log/run-test" + \
@@ -290,7 +357,10 @@ if __name__ == "__main__":
     # Train
     try:
         train(device, model, data_loader, optimizer, writer,
-              init_lr=hparams.initial_learning_rate
+              init_lr=hparams.initial_learning_rate,
+              nepochs=hparams.nepochs,
+              checkpoint_interval=hparams.speaker_encoder_checkpoint_interval,
+              checkpoint_dir=checkpoint_dir
               )
-    except:
-        pass
+    except KeyboardInterrupt:
+        save_checkpoint(model, optimizer, global_step, checkpoint_dir, global_epoch)

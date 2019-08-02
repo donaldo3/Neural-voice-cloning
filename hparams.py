@@ -139,7 +139,11 @@ hparams = hparam_tf.hparam.HParams(
     not_for_train_speaker="300, 301, 302, 303, 304, 305",
     vocoder="world",
     converter_dim=187, # fft_size//2 + 1 for linear spec when using Griffin-Lim vocoder
-    cloning_sample_size=4
+    cloning_sample_size=4,
+    f_mapped=30,
+    speaker_encoder_attention_num_heads=8,
+    speaker_encoder_attention_dim=16,
+    speaker_encoder_checkpoint_interval=1000
 )
 
 

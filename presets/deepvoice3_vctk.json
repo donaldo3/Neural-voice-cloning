@@ -38,14 +38,14 @@
   "freeze_embedding": false,
   "use_decoder_state_for_postnet_input": true,
   "pin_memory": true,
-  "num_workers": 2,
+  "num_workers": 12,
   "masked_loss_weight": 0.5,
   "priority_freq": 3000,
   "priority_freq_weight": 0.0,
   "binary_divergence_weight": 0.1,
   "use_guided_attention": true,
   "guided_attention_sigma": 0.4,
-  "batch_size": 16,
+  "batch_size": 8,
   "adam_beta1": 0.5,
   "adam_beta2": 0.9,
   "adam_eps": 1e-06,
@@ -65,5 +65,9 @@
   "not_for_train_speaker": "300, 301, 302, 303, 304, 305",
   "vocoder": "world",
   "converter_dim": 187,
-  "cloning_sample_size": 4
+  "cloning_sample_size": 4,
+  "f_mapped": 30,
+  "speaker_encoder_attention_num_heads": 8,
+  "speaker_encoder_attention_dim": 16,
+  "speaker_encoder_checkpoint_interval": 1000
 }
