@@ -187,9 +187,9 @@ class SpeakerDataSet(Dataset):
 
         # Create lists of training speaker_ids
         black_list_speaker = hparams.not_for_train_speaker.split(", ")
-        black_list_speaker_ids = [self.speaker_to_speaker_id[i] for i in black_list_speaker]
+        self.black_list_speaker_ids = [self.speaker_to_speaker_id[i] for i in black_list_speaker]
         speaker_ids = np.unique(speaker_ids).tolist()
-        for i in black_list_speaker_ids:
+        for i in self.black_list_speaker_ids:
             speaker_ids.remove(i)
         self.train_speaker_id_list = speaker_ids
 
@@ -272,14 +272,28 @@ def collate_fn(batch):
 class PyTorchDataset(Dataset):
     def __init__(self, speaker_data_source, tts_checkpoint_path):
         self.speaker_data_source = speaker_data_source
-        self.speaker_embedding = Embedding(num_embeddings=hparams.n_speakers,
-        embedding_dim=hparams.speaker_embed_dim,padding_idx=None,
-                std=hparams.speaker_embedding_weight_std)
+
         state = _load(tts_checkpoint_path)["state_dict"]
         key = "embed_speakers.weight"
         pretrained_embedding = state[key]
-        self.speaker_embedding.weight.data.copy_(pretrained_embedding)
-        # Expand speaker_embedding into 3D and save as list of tensors.
+
+        # Create embedding tensor with black list embeddings removed
+        black_list_id = speaker_data_source.black_list_speaker_ids
+        list_embedding = [elem for elem in pretrained_embedding]
+            #pretrained_embedding.tolist()
+        start = black_list_id[0]
+        end = black_list_id[-1] +1
+
+        del list_embedding[start:end] # TODO: black list must be continuously selected
+        tensor_embedding = torch.stack(list_embedding)
+
+        # Create speaker_embedding and copy the tensor from above
+
+        self.speaker_embedding = Embedding(num_embeddings=tensor_embedding.size()[0],
+                                           embedding_dim=hparams.speaker_embed_dim, padding_idx=None,
+                                           std=hparams.speaker_embedding_weight_std
+                                           )
+        self.speaker_embedding.weight.data.copy_(tensor_embedding)
 
     '''
     Return FileSourceDatas of n_batch speakers and speaker embedding from TTS(2D: batch, d_emb)
