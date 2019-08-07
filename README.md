@@ -1,3 +1,14 @@
+# Neural voice cloning by Sunghee Jung
+## Speaker enrollment
+### hparams configuration
+* 'batch_size' must match the number of cloning speakers that you want clone at a time
+* 'cloning_sample_size' must match the number of cloning samples per each speaker.
+* In case the number of available cloning samples are different for each speaker, you should clone one speaker  at a time and set 
+'batch_size=1'
+
+
+
+
 ![alt text](assets/banner.jpg)
 
 # Deepvoice3_pytorch
@@ -336,3 +347,4 @@ Part of code was adapted from the following projects:
 - https://github.com/facebookresearch/fairseq-py
 
 Banner and logo created by [@jraulhernandezi](https://github.com/jraulhernandezi) ([#76](https://github.com/r9y9/deepvoice3_pytorch/issues/76))
+
