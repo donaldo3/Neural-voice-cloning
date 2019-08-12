@@ -1,9 +1,11 @@
 """
+speaker_enrollment_general supports only one cloning target speaker at a time.
+This module supports speaker enrollment from cloning samples in wav files.
 Generate speaker embedding from new speaker and save it at the LUT
 This LUT is going to be loaded at synthesis2.py
 
-usage: speaker_enrollment.py [options] <checkpoint-speaker-encoder> <checkpoint-multispeaker-tts>
-<checkpoint-speaker-embedding> <vctk-root> <data-root>
+usage: speaker_enrollment_general.py [options] <checkpoint-speaker-encoder> <checkpoint-multispeaker-tts>
+<checkpoint-speaker-embedding> <wav-root> <speaker-meta>
 
 options:
     --hparams=<parmas>                    Hyper parameters [default: ].
@@ -20,7 +22,7 @@ options:
     -h, --help               Show help message.
 """
 import os
-
+import glob
 import numpy as np
 import torch
 from docopt import docopt
@@ -28,7 +30,8 @@ from nnmnkwii.datasets import FileSourceDataset
 from nnmnkwii.datasets import vctk
 from torch.utils import data as data_utils
 from torch.utils.data import Dataset
-
+import audio
+import librosa
 # The deepvoice3 model
 from deepvoice3_pytorch import frontend
 from deepvoice3_pytorch.modules import Embedding
@@ -36,44 +39,33 @@ from hparams import hparams
 from speaker_encoder import SpeakerEncoder
 from train import MelSpecDataSource
 from train import PartialyRandomizedSimilarTimeLengthSampler
-
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 #TODO: Make an interface for giving this. Hard coding is bad.
 cloning_sample_id = [0, 1, 2, 3, 4, 5]
 
-class SpeakerDataSet(Dataset):
+class WavDataSet(Dataset):
 
     '''
-    Create list or dictionary of MelSpecDataSource
+    Create list or mels from wav files in wav_root
     '''
-    def __init__(self, vctk_root, data_root):
-        self.data_root = data_root
-        self.mel_spec_datasource_list = []
-
-        speakers = vctk.available_speakers
-        td = vctk.TranscriptionDataSource(vctk_root, speakers=speakers)
-        transcriptions = td.collect_files()
-        speaker_ids = td.labels # All speakers except for p315
-        self.speaker_to_speaker_id = td.labelmap
-
-        # Create lists of training speaker_ids
-        black_list_speaker = hparams.not_for_train_speaker.split(", ")
-        self.cloning_speaker_ids = [self.speaker_to_speaker_id[i] for i in black_list_speaker]
-
-        # Assuming self.speaker_list contains speaker_ids of training speakers
-        for spkr_id in self.cloning_speaker_ids:
-            Mel = FileSourceDataset(MelSpecDataSource(data_root, speaker_id=spkr_id))
-            self.mel_spec_datasource_list.append(Mel)
+    def __init__(self, wav_root):
+        wav_root = os.path.join(wav_root, "*.wav")
+        self.wav_paths = glob.glob(wav_root)
 
     '''
     Return MelSpecDataSource of desired speaker idx
     '''
     def __getitem__(self, idx):
-        return self.mel_spec_datasource_list[idx]
+        wav = audio.load_wav(self.wav_paths[idx])
+        wav, _ = librosa.effects.trim(wav, top_db=8)
+        if hparams.rescaling:
+            wav = wav / np.abs(wav).max() * hparams.rescaling_max
+        mel = audio.melspectrogram(wav).astype(np.float32)
+        return mel
 
     def __len__(self):
-        return len(self.mel_spec_datasource_list)
+        return len(self.wav_paths)
 
 def run(model):
     model = model.to(device)
@@ -161,8 +153,8 @@ if __name__ == "__main__":
     checkpoint_speaker_encoder = args["<checkpoint-speaker-encoder>"]
     checkpoint_tts = args["<checkpoint-multispeaker-tts>"]
     checkpoint_speaker_embedding = args["<checkpoint-speaker-embedding>"]
-    vctk_root = args["<vctk-root>"]
-    data_root = args["<data-root>"] # Directory where preprocessed mel-spectrograms are.
+    wav_root = args["<wav-root>"]
+    speaker_meta = args["<speaker-meta>"]
 
     preset = args["--preset"]
     if preset is not None:
@@ -195,17 +187,10 @@ if __name__ == "__main__":
     Generate input to speaker encoder with batch size equal to the number of speaker_id 
     '''
     # Create mel batch of size [B x N, T, F]
-    speaker_dataset = SpeakerDataSet(vctk_root, data_root)
-    sds_list = []
-    for i in range(len(speaker_dataset)):
-        sds_list.append(speaker_dataset.__getitem__(i))
-
-    # Create mel batch with designated sample id
+    speaker_dataset = WavDataSet(wav_root)
     cloning_samples = []
-    # cloning_samples has B x N samples
-    for speaker in sds_list:
-        for i in cloning_sample_id:
-            cloning_samples.append(speaker.__getitem__(i))
+    for i in range(len(speaker_dataset)):
+        cloning_samples.append(speaker_dataset.__getitem__(i).T)
 
     # Match the length of frames in the batch
     cloning_samples = collate_fn_sub(cloning_samples)
@@ -232,7 +217,8 @@ if __name__ == "__main__":
 
     # Save new_embedding
     dir = checkpoint_speaker_embedding
-    checkpoint_path = os.path.join(dir, "speaker_embedding_with_cloning_speakers.tar")
+    id = pretrained_embedding.data.size()[0]
+    checkpoint_path = os.path.join(dir, speaker_meta +  "_" + str(id) + ".tar")
     torch.save(
         {"state_dict": new_embedding.state_dict()}, checkpoint_path
     )
@@ -240,14 +226,9 @@ if __name__ == "__main__":
           .format(checkpoint_path))
 
     print("Mapping between newly added speaker ids and speaker names are:")
-    starting_id = pretrained_embedding.data.size()[0]
-    ending_id = starting_id + pred_speaker_embeddings.data.size()[0]
-
-    ids = range(starting_id, ending_id)
-    speakers = hparams.not_for_train_speaker.split(", ")
+    speaker = speaker_meta
     print("{:>5}, {:>5}".format("id", "speaker"))
-    for id, speaker in zip(ids, speakers):
-        print("{:>5}, {:>5}".format(id, speaker))
+    print("{:>5}, {:>5}".format(id, speaker))
 
 
 

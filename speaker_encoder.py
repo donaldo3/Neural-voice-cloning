@@ -32,7 +32,7 @@ class SampleAttention(nn.Module):
         #TODO: MultiheadAttention implementation
         #x, _ = self.multi_head_attn(key, query, value)
         #x = self.fc(x)
-        x = self.fc(value).squeeze()
+        x = self.fc(value).squeeze(dim=-1)
 
         # TODO: Try normalizing with softsign and functional.normalize and compare with softmax
         # x = self.softsign(x)
