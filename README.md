@@ -1,10 +1,83 @@
 # Neural voice cloning by Sunghee Jung
-## Speaker enrollment
+## 1. How to train
+You need to train 1) Multi-speaker tts and 2) Speaker encoder.
+### 1. How to train multi-speaker tts
+ In case you want to spare some VCTK speakers for evaluation set or test set, there is hparam option for that.
+ Write down the speakers as follows.
+ So far, only sequential speakers are supported to spare.
+  ```
+  "not_for_train_speaker": "300, 301, 302, 303, 304, 305"
+ ```
+ Rest of the process for training is identical to DeepVoice3 by r9y9.
+ In case you would like WORLD vocoder support, refer to the readme in [https://github.com/hash2430/dv3_world]
+ * Argument
+ ```
+--data-root=<path-to-preprocessed-vctk>
+--cmp-root=<path-to-world-training-features>
+--preset=presets/deepvoice3_vctk.json
+--checkpoint-dir=<where-to-save-multispeaker-tts>
+```
+### 2. How to train speaker encoder
+Aside from multispeaker tts, you will need a speaker encoder from which you can extract an embedding of new target speaker whose voice you want to clone.
+```
+python train_speaker_encoder.py
+--data-root=<preprocessed-vctk>
+--checkpoint-multispeaker-tts=<where-to-find-multispeaker-tts-model>
+--checkpoint-dir=<where-to-save-speaker-encoder-model>
+--vctk-root=<path-to-VCTK-Corpus>
+--preset=presets/deepvoice3_vctk.json
+```
+## 2. Speaker enrollment
+At this stage, speaker embedding lookup table generated for training speakers are loaded 
+and newly inferenced embedding of cloned speaker is appended at the end.
 ### hparams configuration
-* 'batch_size' must match the number of cloning speakers that you want clone at a time
-* 'cloning_sample_size' must match the number of cloning samples per each speaker.
-* In case the number of available cloning samples are different for each speaker, you should clone one speaker  at a time and set 
-'batch_size=1'
+* 'batch_size' represents the number of speakers to be enrolled at a time.
+    * In case you are enrolling speakers who are not in VCTK, it supports only one speaker enrollment at a time.
+* 'cloning_sample_size' must match the number of cloning samples you want to use for cloning.
+
+### VCTK speaker enrollment
+In case you want to extract speaker embeddings from the VCTK speakers who are not used for training,
+there is 'speaker_enrollment_vctk.py'. This script extracts speaker embedding from mel spectrograms of VCTK speakers.
+There are a couple of differences between how to use this module and general module
+* You can enroll multiple speakers by setting batch_size equal to the number of speakers who are left out during training
+* You can specify the which audio samples you are using to extract embedding.
+* preprocess.py 
+    * You must run preprocess with 'vctk_cloning' mode to extract mel spectrogram of target speakers (who are left out during preprocessing for training speakers with 'vctk' mode)
+    * Run preprocess.py with the same options as preparing for 'vctk' except this time the mode is 'vctk_cloning' instead of  'vctk'
+    * Preprocessing command
+    ```
+    python preprocess.py
+    --preset=presets/deepvoice3_vctk.json vctk_cloning <vctk-root> <data-root>
+    ```
+* VCTK speaker enrollment command 
+```
+python speaker_enrollment_vctk.py [options] <checkpoint-speaker-encoder> <checkpoint-multispeaker-tts>
+<checkpoint-speaker-embedding> <vctk-root> <data-root> 
+```
+### General speaker enrollment: whoever you wish to clone
+* You can try enrolling some random speaker that are found online or maybe yourself.
+* I recommed enhancing the speech with SEGAN before you use it to extract embedding and enroll that person to your lookup table.
+* In order to enroll speaker who are not VCTK, use the 'speaker_enrollment_general.py' script.
+    * Unlike 'speaker_enrollment_vctk', it extracts speaker embedding from wav files in the directory you provide.
+    * Then it adds this new speaker embedding at the end of your lookup table which was trained during multispeaker-tts training step.
+
+```
+python speaker_enrollment_general.py [options] <checkpoint-speaker-encoder> <checkpoint-multispeaker-tts>
+<checkpoint-speaker-embedding> <wav-root> <speaker-meta>
+```
+speaker-meta (which is given as program argument by you) and speaker-id (which is automatically decided according 
+to the exsiting LUT size) are used to decided the name of speaker LUT checkpoint to be saved.
+## 3. Synthesize with enrolled speaker
+You need to specify where to load 1) multi-speaker tts and 2) speaker lookup table (which includes the result of speaker enrollment and trained speaker embeddings)
+```
+python synthesis2.py
+<checkpoint-multi-speaker-tts>
+text_list.txt
+<path-to-save-output>
+--preset=presets/deepvoice3_vctk.json
+--speaker_id=<speaker_id_of_cloned_speaker_or_trained_speaker>
+--speaker-embedding-lut=<path-to-lut-generated-from-enrollment-step>
+```
 
 
 
