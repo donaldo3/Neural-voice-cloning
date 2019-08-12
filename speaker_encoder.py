@@ -56,7 +56,7 @@ class SpeakerEncoder(nn.Module):
         self.batch_size = batch_size
         self.cloning_sample_size = cloning_sample_size
 
-        self.preattention=[(h, k, 1), (h, k, 3)]
+        self.preattention = 2
         self.convolutions=[(h, k, 1), (h, k, 3), (h, k, 9), (h, k, 27),
                       (h, k, 1)]
         self.prenet_list = nn.ModuleList()
@@ -65,7 +65,7 @@ class SpeakerEncoder(nn.Module):
         self.cloning_sample_prj = nn.Linear(f_mapped, d_embedding)
         self.sample_attn = SampleAttention(d_embedding, num_heads, d_attn, f_mapped)
 
-        for out_channels, kernel_size, dilation in self.preattention:
+        for i in range(self.preattention):
             if in_channels != f_mapped:
                 self.prenet_list.append(
                     FC_ELU(in_channels, f_mapped)
@@ -88,9 +88,6 @@ class SpeakerEncoder(nn.Module):
     def forward(self, mel):
         # input mel: [B x N, T, F]
         x = mel.contiguous()
-        # Fix dimension if necessary for FC
-        # size = x.size()
-        # x = x.view(-1, size[-1])
         for prenet in self.prenet_list:
             x = prenet(x)
 
