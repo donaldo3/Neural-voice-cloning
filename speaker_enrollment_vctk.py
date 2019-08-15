@@ -33,10 +33,10 @@ from torch.utils.data import Dataset
 from deepvoice3_pytorch import frontend
 from deepvoice3_pytorch.modules import Embedding
 from hparams import hparams
-from speaker_encoder import SpeakerEncoder
+from speaker_encoder.speaker_encoder1 import SpeakerEncoder
 from train import MelSpecDataSource
 from train import PartialyRandomizedSimilarTimeLengthSampler
-
+import datetime
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 #TODO: Make an interface for giving this. Hard coding is bad.
@@ -232,7 +232,9 @@ if __name__ == "__main__":
 
     # Save new_embedding
     dir = checkpoint_speaker_embedding
-    checkpoint_path = os.path.join(dir, "speaker_embedding_with_cloning_speakers.tar")
+    now = datetime.datetime.now()
+    ckpt_file = now.strftime("%Y%m%d-%H:%M:%S") + ".tar"
+    checkpoint_path = os.path.join(dir, ckpt_file)
     torch.save(
         {"state_dict": new_embedding.state_dict()}, checkpoint_path
     )

@@ -76,7 +76,7 @@ def _process_utterance(out_dir, index, speaker_id, wav_path, text):
         wav, _ = librosa.effects.trim(wav, top_db=25)
     # Librosa trim seems to cut off the ending part of speech
     else:
-        wav, _ = librosa.effects.trim(wav, top_db=15)
+        wav, _ = librosa.effects.trim(wav, top_db=25)
 
     if hparams.rescaling:
         wav = wav / np.abs(wav).max() * hparams.rescaling_max

@@ -82,6 +82,8 @@ text_list.txt
 
 
 
+
+
 ![alt text](assets/banner.jpg)
 
 # Deepvoice3_pytorch
