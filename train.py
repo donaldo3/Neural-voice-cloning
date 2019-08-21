@@ -173,7 +173,7 @@ class _BinaryDataSource(FileDataSource):
 
 
     def collect_features(self, path):
-        dimension = 187
+        dimension = hparams.converter_dim
         with open(path, 'rb') as fid:
             features = np.fromfile(fid, dtype=np.float32)
         frame_number = features.size // dimension
@@ -242,9 +242,22 @@ class LinearSpecDataSource(_NPYDataSource):
     def __init__(self, data_root, speaker_id=None):
         super(LinearSpecDataSource, self).__init__(data_root, 0, speaker_id)
 
+class WorldDataSourceForBCEOnVuv(_BinaryDataSource):
+    def __init__(self, data_root, meta_root, speaker_id=None):
+        super(WorldDataSourceForBCEOnVuv, self).__init__(data_root, meta_root, speaker_id)
+
 class WorldDataSource(_BinaryDataSource):
     def __init__(self, data_root, meta_root, speaker_id=None):
         super(WorldDataSource, self).__init__(data_root, meta_root, speaker_id)
+
+    def collect_features(self, path):
+        dimension = hparams.converter_dim
+        with open(path, 'rb') as fid:
+            features = np.fromfile(fid, dtype=np.float32)
+        frame_number = features.size // dimension
+        features = features[:(dimension * frame_number)]
+        features = features.reshape((-1, dimension))
+        return features
 
 class PartialyRandomizedSimilarTimeLengthSampler(Sampler):
     """Partially randmoized sampler
@@ -608,6 +621,27 @@ def spec_loss(y_hat, y, mask, priority_bin=None, priority_w=0):
     return l1_loss, binary_div
 
 def world_loss(world_outputs, world, mask):
+    vuv_masked_l1 = MaskedL1Loss()
+    vuv_l1 = nn.L1Loss()
+    vuv_loss_masked_l1 = vuv_masked_l1(world_outputs[:,:,183].unsqueeze(dim=2), world[:,:,183].unsqueeze(dim=2), mask=mask)
+    vuv_loss_l1 = vuv_l1(world_outputs[:,:,183], world[:,:,183])
+
+    other_feats_output = torch.cat((world_outputs[:,:,:183], world_outputs[:,:,184:]), dim=2)
+    other_feats = torch.cat((world[:,:,:183], world[:,:,184:]), dim=2)
+    masked_l1 = MaskedL1Loss()
+    l1 = nn.L1Loss()
+    w = hparams.masked_loss_weight
+    if w > 0:
+        assert mask is not None
+        l1_loss = w * masked_l1(other_feats_output, other_feats, mask=mask) + (1 - w) * l1(other_feats_output, other_feats)
+        vuv_loss = w * vuv_loss_masked_l1 + (1 - w) * vuv_loss_l1
+    else:
+        assert mask is None
+        l1_loss = l1(other_feats_output, other_feats)
+        vuv_loss = vuv_loss_l1
+    return vuv_loss, l1_loss
+
+def world_loss_with_bce_on_vuv(world_outputs, world, mask):
     BCE = nn.BCEWithLogitsLoss()
     vuv_loss = BCE(world_outputs[:,:,183], world[:,:,183])
 
@@ -623,6 +657,7 @@ def world_loss(world_outputs, world, mask):
         assert mask is None
         l1_loss = l1(other_feats_output, other_feats)
     return vuv_loss, l1_loss
+
 
 @jit(nopython=True)
 def guided_attention(N, max_N, T, max_T, g):
@@ -762,8 +797,9 @@ Please set a larger value for ``max_position`` in hyper parameters.""".format(
             # linear:
             if train_postnet:
                 if hparams.vocoder == "world":
-                    vuv_loss, other_loss = world_loss(postnet_outputs[:, :-r, :], world[:, r:, :], target_mask)
-                    postnet_loss = (1 - w) * vuv_loss + w * other_loss
+                    w = hparams.vuv_weight_postnet
+                    vuv_loss, other_loss = world_loss_with_bce_on_vuv(postnet_outputs[:, :-r, :], world[:, r:, :], target_mask)
+                    postnet_loss = w * vuv_loss + (1 - w) * other_loss
                 else:
                     n_priority_freq = int(hparams.priority_freq / (hparams.sample_rate * 0.5) * postnet_output_dim)
                     linear_l1_loss, linear_binary_div = spec_loss(
@@ -1022,7 +1058,7 @@ if __name__ == "__main__":
     X = FileSourceDataset(TextDataSource(data_root, speaker_id))
     Mel = FileSourceDataset(MelSpecDataSource(data_root, speaker_id))
     Y = FileSourceDataset(LinearSpecDataSource(data_root, speaker_id))
-    World = FileSourceDataset(WorldDataSource(cmp_root, data_root, speaker_id))
+    World = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root, data_root, speaker_id))
 
     # Prepare sampler
     frame_lengths = Mel.file_data_source.frame_lengths
