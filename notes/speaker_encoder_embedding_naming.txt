@@ -1,0 +1,11 @@
+At the end of file or directory name, t0~t3 means the following types of speaker encoder
+In order to use speaker encoder of certain type, you must change the 'import' part to read the corresponding module under 'speaker_encoder' package
+
+0: no multihead attention anywhere
+1: multihead attention at cloning attention
+2: multihead attention at cloning attention and temporal processing unit
+3: multihead attention at cloning attention, temporal processing unit and spectral processing unit
+
+speaker embedding lut name
+- checkpoint with name containing speaker encoder type and the created time => vctk 300 to 205 speakers cloned as 108 to 113 id
+- checkpoint with speaker encoder type, person name and number => general cloning of speaker other than vctk. one cloning speaker appended as id 108
