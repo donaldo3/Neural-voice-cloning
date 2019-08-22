@@ -33,7 +33,7 @@ from torch.utils.data import Dataset
 from deepvoice3_pytorch import frontend
 from deepvoice3_pytorch.modules import Embedding
 from hparams import hparams
-from speaker_encoder.speaker_encoder1 import SpeakerEncoder
+from speaker_encoder.speaker_encoder3 import SpeakerEncoder
 from train import MelSpecDataSource
 from train import PartialyRandomizedSimilarTimeLengthSampler
 import datetime

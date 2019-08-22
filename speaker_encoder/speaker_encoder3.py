@@ -69,7 +69,7 @@ class MultiheadAttention(nn.Module):
 
             scaler = 1 / math.sqrt(key.size()[-1])
             scaled = scaler * y
-            attn_weight = nn.functional.softmax(scaled)
+            attn_weight = nn.functional.softmax(scaled, dim=-1)
             head = torch.matmul(attn_weight, value)
             concat.append(head)
 
@@ -137,6 +137,7 @@ class SpeakerEncoder(nn.Module):
         self.convnet_list = nn.ModuleList()
         self.avg_pool = nn.AvgPool1d(kernel_size=k)
         self.cloning_sample_prj = nn.Linear(f_mapped, d_embedding)
+        self.temporal_attention = SampleAttention(d_embedding, num_heads, d_attn, f_mapped)
         self.sample_attn = SampleAttention(d_embedding, num_heads, d_attn, f_mapped)
 
         for i in range(self.preattention):
@@ -171,15 +172,24 @@ class SpeakerEncoder(nn.Module):
         for c in self.convnet_list:
             x = c(x, None)
 
-        mean_pool_output = nn.functional.avg_pool1d(x, x.size()[-1])
-        mean_pool_output = mean_pool_output.view(-1, self.cloning_sample_size, self.f_mapped)
-        attn_weights = self.sample_attn(mean_pool_output) #[b, N]
-        cloning_samples = self.cloning_sample_prj(mean_pool_output) #[b, N, d_emb]
+        # Temporal aggregation
+        temporal_attn_weights = self.temporal_attention(x.transpose(1, 2)) # [b x N, T]
+
+        sample_embeddings = []
+        for attn, frame in zip(temporal_attn_weights, x):
+            sample_embedding = attn.matmul(frame.transpose(0, 1))
+            # sample_embedding = sample_embedding.squeeze()
+            sample_embeddings.append(sample_embedding)
+        sample_embeddings = torch.stack(sample_embeddings)
+
+        time_aggregated = sample_embeddings.view(-1, self.cloning_sample_size, self.f_mapped)
+        attn_weights = self.sample_attn(time_aggregated)
+        cloning_samples = self.cloning_sample_prj(time_aggregated)
 
         speaker_embeddings = []
-        for attn, samples in zip(attn_weights, cloning_samples):
-            speaker_embedding = attn.matmul(samples) #[d_emb]
-            speaker_embedding = speaker_embedding.squeeze() #unnecessary
+        for attn, sample in zip(attn_weights, cloning_samples):
+            speaker_embedding = attn.matmul(sample)
+            # speaker_embedding = speaker_embedding.squeeze()
             speaker_embeddings.append(speaker_embedding)
         speaker_embeddings = torch.stack(speaker_embeddings)
         return speaker_embeddings

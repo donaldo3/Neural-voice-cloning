@@ -1,0 +1,2 @@
+ m0: the one with BCELoss, 60 dim mel, 15 dB trimming, guided attention, vuv weight 0.9 & mgc,lf0,bap weight 0.1 for postnet loss
+ m1: the one with L1Loss and maskedL1Loss, 80 dim mel, 25 dB trimming, vuv weight 0.4

@@ -47,7 +47,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils import data as data_utils
 from torch.utils.data.sampler import Sampler
 import numpy as np
-from speaker_encoder import SpeakerEncoder
+from speaker_encoder.speaker_encoder3 import SpeakerEncoder
 from numba import jit
 
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
