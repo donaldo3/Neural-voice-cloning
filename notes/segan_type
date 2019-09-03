@@ -1,0 +1,4 @@
+gx: speech enhancement has not been performed
+g0: Pretrained segan
+g1: segan trained with noisy VCTK 28 and corresponding clean data
+g2: segan trained with noisy, noisyreverb, reverb, DR 28 and corresponding clean data
