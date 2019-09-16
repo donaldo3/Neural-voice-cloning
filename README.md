@@ -93,7 +93,7 @@ You need to adjust hard-coded directories of following scripts to match yours.
 * Run "embedding_enhancement_data_prepare/pair_db.py" to pair wav files of noisy and clean VCTK with matching file names.
 * Run "embedding_enhancement_data_prepare/pair_with_speaker.py" to create subdirectory of each speaker under noisy and clean VCTK wavs.
 ### 4.2. Preparing mel spectrogram
-* Run "preprocess.py" 
+* Run "preprocess.py" **twice**: once for clean mel and once for noisy mel.
     * **This is where I made mistake.** I preprocessed it into 80 dim mel and tested with TTS and encoder that is trained on 60 dim mel.
 ```
 --preset=presets/deepvoice3_vctk_80mel_256spk_emb.json
