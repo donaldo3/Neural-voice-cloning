@@ -18,7 +18,7 @@ import importlib
 from hparams import hparams, hparams_debug_string
 
 
-def preprocess(mod, in_dir, out_root, num_workers):
+def preprocess(mod, in_dir, out_dir, num_workers):
     os.makedirs(out_dir, exist_ok=True)
     metadata = mod.build_from_path(in_dir, out_dir, num_workers, tqdm=tqdm)
     write_metadata(metadata, out_dir)
@@ -28,7 +28,7 @@ def write_metadata(metadata, out_dir):
     with open(os.path.join(out_dir, 'train.txt'), 'w', encoding='utf-8') as f:
         for m in metadata:
             f.write('|'.join([str(x) for x in m]) + '\n')
-    frames = sum([m[2] for m in metadata])
+    frames = sum([m[1] for m in metadata])
     frame_shift_ms = hparams.hop_size / hparams.sample_rate * 1000
     hours = frames * frame_shift_ms / (3600 * 1000)
     print('Wrote %d utterances, %d frames (%.2f hours)' % (len(metadata), frames, hours))
@@ -54,6 +54,6 @@ if __name__ == "__main__":
     assert hparams.name == "deepvoice3"
     print(hparams_debug_string())
 
-    assert name in ["jsut", "ljspeech", "vctk", "nikl_m", "nikl_s", "json_meta", "vctk_cloning"]
+    assert name in ["jsut", "ljspeech", "vctk", "nikl_m", "nikl_s", "json_meta", "vctk_cloning", "noisy_clean_vctk"]
     mod = importlib.import_module(name)
     preprocess(mod, in_dir, out_dir, num_workers)

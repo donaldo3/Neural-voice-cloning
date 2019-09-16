@@ -14,6 +14,7 @@ options:
     --replace_pronunciation_prob=<N>  Prob [default: 0.0].
     --speaker_id=<id>                 Speaker ID (for multi-speaker model).
     --output-html                     Output html for blog post.
+    --test-id-list=<path>             Path for world test_id_list.scp
     -h, --help               Show help message.
 """
 from docopt import docopt
@@ -88,6 +89,7 @@ if __name__ == "__main__":
     checkpoint_path = args["<checkpoint>"]
     text_list_file_path = args["<text_list_file>"]
     dst_dir = args["<dst_dir>"]
+    test_id_list = args["--test-id-list"]
     checkpoint_seq2seq_path = args["--checkpoint-seq2seq"]
     checkpoint_postnet_path = args["--checkpoint-postnet"]
     max_decoder_steps = int(args["--max-decoder-steps"])
@@ -130,6 +132,8 @@ if __name__ == "__main__":
     model.seq2seq.decoder.max_decoder_steps = max_decoder_steps
 
     os.makedirs(dst_dir, exist_ok=True)
+    test_id_file = open(test_id_list, 'w')
+    out_files = []
     with open(text_list_file_path, "rb") as f:
         lines = f.readlines()
         for idx, line in enumerate(lines):
@@ -142,6 +146,7 @@ if __name__ == "__main__":
             dst_alignment_path = join(
                 dst_dir, "{}_{}{}_alignment.png".format(idx, checkpoint_name,
                                                         file_name_suffix))
+            out_files.append("{}_{}{}\n".format(idx, checkpoint_name, file_name_suffix))
             plot_alignment(alignment.T, dst_alignment_path,
                            info="{}, {}".format(hparams.builder, basename(checkpoint_path)))
             with open(dst_wav_path, 'wb') as fid:
@@ -166,4 +171,6 @@ Your browser does not support the audio element.
                 print(idx, ": {}\n ({} chars, {} words)".format(text, len(text), len(words)))
 
     print("Finished! Check out {} for generated audio samples.".format(dst_dir))
+    test_id_file.writelines(out_files)
+    test_id_file.close()
     sys.exit(0)

@@ -10,7 +10,8 @@ import lws
 
 
 def load_wav(path):
-    return librosa.core.load(path, sr=hparams.sample_rate)[0]
+    wav, sr = librosa.core.load(path, sr=hparams.sample_rate)
+    return wav
 
 
 def save_wav(wav, path):

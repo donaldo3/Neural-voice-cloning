@@ -115,7 +115,7 @@ class TextDataSource(FileDataSource):
             # Filter by speaker_id
             # using multi-speaker dataset as a single speaker dataset
             if self.speaker_id is not None:
-                indices = np.array(speaker_ids) == self.speaker_id
+                indices = np.asarray(np.array(speaker_ids) == self.speaker_id).nonzero([0])
                 texts = list(np.array(texts)[indices])
                 self.multi_speaker = False
                 return texts

@@ -79,8 +79,44 @@ text_list.txt
 --speaker-embedding-lut=<path-to-lut-generated-from-enrollment-step>
 ```
 
+## 4. Embedding enhancement
+The idea of embedding enhancement is to experiment if it is possible to use wild low-quality DB for voice cloning purpose.
+I have tested with speech enhancement + speaker encoder to generate cloned voice embedding. That worked fine.
+However, how about the other way around? How about speaker encoder + embedding enhancement?
+Embedding enhancement module is trained in a supervised manner in order to generate the embedding of clean speech given embedding of noisy speech as input.
+The inspiration is from the paper "Predicting Expressive Speaking Style from Text in End-To-End Speech Synthesis".
+This does not work by now. Maybe needs some more experiment or maybe it is an absurd idea. Anyways, below is how to try this idea.
+### 4.1. Paring noisy and clean VCTK
+You need to adjust hard-coded directories of following scripts to match yours.
+* Download VCTK variations such as noisy VCTK, reverb VCTK, noisy-reverb VCTK, DR(Device-Record) VCTK.
+* Run "embedding_enhancement_data_prepare/summ_vctk.py" to generate lists of speakers.
+* Run "embedding_enhancement_data_prepare/pair_db.py" to pair wav files of noisy and clean VCTK with matching file names.
+* Run "embedding_enhancement_data_prepare/pair_with_speaker.py" to create subdirectory of each speaker under noisy and clean VCTK wavs.
+### 4.2. Preparing mel spectrogram
+* Run "preprocess.py" 
+    * **This is where I made mistake.** I preprocessed it into 80 dim mel and tested with TTS and encoder that is trained on 60 dim mel.
+```
+--preset=presets/deepvoice3_vctk_80mel_256spk_emb.json
+vctk
+/past_projects/DB/VCTK_variants/all_VCTK_clean
+/past_projects/DB/VCTK_variants/all_VCTK_clean_mel_60
+```
 
-
+### 4.3. Training embedding enhancement
+* Train embedding enhancement
+```
+--speaker-list-file=/past_projects/DB/VCTK_variants/speakers_trainset_28spk.txt
+--clean-data-root=/past_projects/DB/VCTK_variants/all_VCTK_clean_mel_60
+--noisy-data-root=/past_projects/DB/VCTK_variants/all_VCTK_noisy_mel_60
+--preset=presets/deepvoice3_vctk.json
+--checkpoint-speaker-encoder=/past_projects/deepvoice3_world_converter/checkpoints/t2_190822_speaker_encoder/checkpoint_step000034000_speaker_encoder.pth
+--checkpoint-dir=/past_projects/deepvoice3_world_converter/checkpoints/embedding_enhancement_190905
+```
+### 4.4. Test: Has not been done yet. Because training did not converge. 
+#### 4.4.1. Create embedding from noisy speech
+#### 4.4.2. Run embedding enhancement
+#### 4.4.3. Save the enhanced embedding to a lookup table
+#### 4.4.4. Load Multispeaker TTS and lookuptable using sysnthesis2.py 
 
 
 

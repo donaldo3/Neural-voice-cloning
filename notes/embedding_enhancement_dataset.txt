@@ -1,0 +1,5 @@
+1. Create SpeakerDataSet from speaker_list_file
+    - SpeakerDataSet contains DoubleMelSpecDataSource of each speaker.
+2. DoubleMelSpecDataSource of a speaker
+    - This contains matching clean_data_paths and noisy_data_paths
+    - __getitem__() returns matching clean mel and noisy mel ndarray of specific speaker
