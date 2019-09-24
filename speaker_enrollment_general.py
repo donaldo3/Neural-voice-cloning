@@ -160,7 +160,8 @@ if __name__ == "__main__":
     if preset is not None:
         with open(preset) as f:
             hparams.parse_json(f.read())
-
+    # Override hyper parameters
+    hparams.parse(args["--hparams"])
     _frontend = getattr(frontend, hparams.frontend)
 
     '''

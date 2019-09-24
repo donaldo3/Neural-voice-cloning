@@ -1,3 +1,4 @@
+Korean branch for emotiontts project
 # Neural voice cloning by Sunghee Jung
 ## 1. How to train
 You need to train 1) Multi-speaker tts and 2) Speaker encoder.
@@ -117,7 +118,12 @@ vctk
 #### 4.4.2. Run embedding enhancement
 #### 4.4.3. Save the enhanced embedding to a lookup table
 #### 4.4.4. Load Multispeaker TTS and lookuptable using sysnthesis2.py 
-
+## 5. Transfer learning with LJSpeech
+### 5.1. Data preparation
+* run preprocess and generate and save mel and linear spectrums as in original DeepVoice3.
+* Since I use WORLD as default, create cmp as explained in 
+    * run  '03_prepare_acoustic_features.sh' instead of  '03_vctk_prepare_acoustic_features.sh'. That script is for multispeaker.
+    * modify 'gen_file_id_list.sh' to fit your environment
 
 
 ![alt text](assets/banner.jpg)

@@ -4,6 +4,7 @@ Train speaker encoder with speaker_embeddings from seq2seq TTS as ground truth.
 usage: train_speaker_encoder.py [options]
 
 options:
+    --device=<name>                 Which GPU to use
     --vctk-root=<dir>               Directory for vctk root
     --data-root=<dir>               Directory contains preprocessed features.
     --cmp-root=<dir>                Directory contains world cmp features.
@@ -24,7 +25,7 @@ options:
     -h, --help                      Show this help message and exit
 
 '''
-from train import collate_fn as collate_fn_sub, load_checkpoint
+from train import collate_fn as collate_fn_sub
 from train import PartialyRandomizedSimilarTimeLengthSampler
 from docopt import docopt
 from deepvoice3_pytorch.modules import Embedding
@@ -87,6 +88,22 @@ def save_checkpoint(model, optimizer, step, checkpoint_dir, epoch):
     }, checkpoint_path)
     print("Saved checkpoint:", checkpoint_path)
 
+def load_checkpoint(path, model, optimizer, reset_optimizer=False):
+    global global_step
+    global global_epoch
+
+    print("Load checkpoint from: {}".format(path))
+    checkpoint = _load(path)
+    model.load_state_dict(checkpoint["state_dict"])
+    if not reset_optimizer:
+        optimizer_state = checkpoint["optimizer"]
+        if optimizer_state is not None:
+            print("Load optimizer state from {}".format(path))
+            optimizer.load_state_dict(checkpoint["optimizer"])
+    global_step = checkpoint["global_step"]
+    global_epoch = checkpoint["global_epoch"]
+
+    return model
 def train(device, model, data_loader, optimizer, writer,
           init_lr = 0.002,
           checkpoint_dir=None, checkpoint_interval=10000, nepochs=None,
@@ -309,6 +326,7 @@ class PyTorchDataset(Dataset):
 if __name__ == "__main__":
     args = docopt(__doc__)
     print("Command line args:\n", args)
+    device = args["--device"]
     log_event_path = args["--log-event-path"]
     checkpoint_dir = args["--checkpoint-dir"]
     checkpoint_path = args["--checkpoint"]
@@ -341,7 +359,7 @@ if __name__ == "__main__":
         collate_fn=collate_fn,
         pin_memory=False
     )
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = torch.device(int(device))
     model = SpeakerEncoder(hparams.num_mels, hparams.encoder_channels, hparams.kernel_size,
                            hparams.f_mapped, hparams.speaker_embed_dim,
                            hparams.speaker_encoder_attention_num_heads,

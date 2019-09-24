@@ -2,3 +2,4 @@
  (fail)m1: the one with L1Loss and maskedL1Loss for vuv, 80 dim mel, 25 dB trimming, vuv weight 0.4
  (fail)m2: the one with BCELoss for vuv, 80 dim mel, 25 dB trimming (mistake: cmp root for converter training has been pointing to the mgc of 15 dB trimmed wav (s2)), vuv weight 0.4, 256 dim speaker embedding
  m3: the one with BCELoss for vuv, 80 dim mel, 25 dB trimming, s3 for mgc, vuv weight 0.4, 256 dim speaker embedding
+    - This has problem with clarity of pronunciation

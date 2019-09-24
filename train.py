@@ -21,7 +21,7 @@ options:
     -h, --help                   Show this help message and exit
 """
 from docopt import docopt
-
+from synthesis2 import load_embedding_lut
 import sys
 import gc
 import platform
@@ -1099,7 +1099,8 @@ if __name__ == "__main__":
     # Load embedding
     if load_embedding is not None:
         print("Loading embedding from {}".format(load_embedding))
-        _load_embedding(load_embedding, model)
+        #_load_embedding(load_embedding, model)
+        load_embedding_lut(model, load_embedding)
 
     # Setup summary writer for tensorboard
     if log_event_path is None:
