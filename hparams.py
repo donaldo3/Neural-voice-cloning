@@ -144,7 +144,8 @@ hparams = hparam_tf.hparam.HParams(
     speaker_encoder_attention_num_heads=8,
     speaker_encoder_attention_dim=16,
     speaker_encoder_checkpoint_interval=1000,
-    vuv_weight_postnet=0.1
+    vuv_weight_postnet=0.1,
+    spec_cmp_separator='--'
 )
 
 

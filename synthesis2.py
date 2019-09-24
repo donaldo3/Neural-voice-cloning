@@ -82,14 +82,14 @@ def _load(checkpoint_path):
         checkpoint = torch.load(checkpoint_path,
                                 map_location=lambda storage, loc: storage)
     return checkpoint
-
+# TODO: separate the implementation for this method for synthesis and train (maybe?)
 def load_embedding_lut(model, checkpoint_path):
     state = _load(checkpoint_path)["state_dict"]
     key = "weight"
-    new_embedding_tensor = state[key]
+    new_embedding_tensor = state[key].to(device)
     n_speakers = new_embedding_tensor.size()[0]
     new_embedding = Embedding(num_embeddings=n_speakers, embedding_dim=hparams.speaker_embed_dim, padding_idx=None,
-                              std=hparams.speaker_embedding_weight_std)
+                              std=hparams.speaker_embedding_weight_std).to(device)
     new_embedding.weight.data.copy_(new_embedding_tensor)
     model.embed_speakers = new_embedding
     model.n_speakers = n_speakers

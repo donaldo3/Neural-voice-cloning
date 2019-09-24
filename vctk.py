@@ -96,8 +96,8 @@ def _process_utterance(out_dir, index, speaker_id, wav_path, text):
     mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
 
     # Write the spectrograms to disk:
-    spectrogram_filename = '{}-spec.npy'.format(filename)
-    mel_filename = '{}-mel.npy'.format(filename)
+    spectrogram_filename = '{}{}spec.npy'.format(filename, hparams.spec_cmp_separator)
+    mel_filename = '{}{}mel.npy'.format(filename, hparams.spec_cmp_separator)
     np.save(os.path.join(out_dir, spectrogram_filename), spectrogram.T, allow_pickle=False)
     np.save(os.path.join(out_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
 

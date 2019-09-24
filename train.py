@@ -14,6 +14,7 @@ options:
     --train-seq2seq-only         Train only seq2seq model.
     --train-postnet-only         Train only postnet model.
     --restore-parts=<path>       Restore part of the model.
+    --retrain-for-clarity        Option when we are retraining multiseaker TTS with single speaker DB for clarity improvement
     --log-event-path=<name>      Log event path.
     --reset-optimizer            Reset optimizer.
     --load-embedding=<path>      Load embedding from checkpoint.
@@ -110,8 +111,14 @@ class TextDataSource(FileDataSource):
         assert len(l) == 4 or len(l) == 5
         self.multi_speaker = len(l) == 5
         texts = list(map(lambda l: l.decode("utf-8").split("|")[3], lines))
+        if retrain_for_clarity:
+            self.multi_speaker = True
+
         if self.multi_speaker:
-            speaker_ids = list(map(lambda l: int(l.decode("utf-8").split("|")[-1]), lines))
+            if retrain_for_clarity:
+                speaker_ids = list(map(lambda l: int(hparams.n_speakers) - 1, lines))
+            else:
+                speaker_ids = list(map(lambda l: int(l.decode("utf-8").split("|")[-1]), lines))
             # Filter by speaker_id
             # using multi-speaker dataset as a single speaker dataset
             if self.speaker_id is not None:
@@ -161,11 +168,12 @@ class _BinaryDataSource(FileDataSource):
         self.frame_lengths = []
 
         paths = []
+        separator = hparams.spec_cmp_separator
         for l in lines:
             frame_length = int(l.decode("utf-8").split("|")[2])
             self.frame_lengths.append(frame_length)
 
-            filename = l.decode("utf-8").split("|")[0].split('-')[0] + '.cmp'
+            filename = l.decode("utf-8").split("|")[0].split(separator)[0] + '.cmp'
             path = join(self.data_root, filename)
             paths.append(path)
 
@@ -1007,6 +1015,7 @@ if __name__ == "__main__":
     checkpoint_path = args["--checkpoint"]
     checkpoint_seq2seq_path = args["--checkpoint-seq2seq"]
     checkpoint_postnet_path = args["--checkpoint-postnet"]
+    retrain_for_clarity = args["--retrain-for-clarity"] # Force multi-speaker
     load_embedding = args["--load-embedding"]
     checkpoint_restore_parts = args["--restore-parts"]
     speaker_id = args["--speaker-id"]

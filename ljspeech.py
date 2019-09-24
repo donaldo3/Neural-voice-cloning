@@ -55,7 +55,7 @@ def _process_utterance(out_dir, index, wav_path, text):
 
     # Load the audio to a numpy array:
     wav = audio.load_wav(wav_path)
-
+    filename = os.path.basename(wav_path).replace('.wav', '')
     if hparams.rescaling:
         wav = wav / np.abs(wav).max() * hparams.rescaling_max
 
@@ -67,8 +67,11 @@ def _process_utterance(out_dir, index, wav_path, text):
     mel_spectrogram = audio.melspectrogram(wav).astype(np.float32)
 
     # Write the spectrograms to disk:
-    spectrogram_filename = 'ljspeech-spec-%05d.npy' % index
-    mel_filename = 'ljspeech-mel-%05d.npy' % index
+    # spectrogram_filename = 'ljspeech-spec-%05d.npy' % index
+    spectrogram_filename = '{}{}spec.npy'.format(filename, hparams.spec_cmp_separator)
+
+    # mel_filename = 'ljspeech-mel-%05d.npy' % index
+    mel_filename = '{}{}mel.npy'.format(filename, hparams.spec_cmp_separator)
     np.save(os.path.join(out_dir, spectrogram_filename), spectrogram.T, allow_pickle=False)
     np.save(os.path.join(out_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
 

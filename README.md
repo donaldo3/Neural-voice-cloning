@@ -121,6 +121,7 @@ vctk
 ## 5. Transfer learning with LJSpeech
 ### 5.1. Data preparation
 * run preprocess and generate and save mel and linear spectrums as in original DeepVoice3.
+    * preset: You can either use ljspeech or vctk preset as long as hop_size, sample_rate matches. But if you want separate rescaling configuration for both DB, use separate preset.
 * Since I use WORLD as default, create cmp as explained in 
     * run  '03_prepare_acoustic_features.sh' instead of  '03_vctk_prepare_acoustic_features.sh'. That script is for multispeaker.
     * modify 'gen_file_id_list.sh' to fit your environment
