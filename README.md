@@ -125,6 +125,11 @@ vctk
 * Since I use WORLD as default, create cmp as explained in 
     * run  '03_prepare_acoustic_features.sh' instead of  '03_vctk_prepare_acoustic_features.sh'. That script is for multispeaker.
     * modify 'gen_file_id_list.sh' to fit your environment
+# 6. Using LJSpeech and VCTK altogether at the same time for multi-speaker tts training
+ - --force-multispeaker flag on
+    - --data-root-single, --data-root-multi, --cmp-root-single, --cmp-root-multi must be given
+    - The number of speakers must match the number of 'multispeaker speakers' + 1
+    - The suffix(or separator) for preprocessed mel and linear spectrogram name for both single and multispeaker DB must match.
 
 
 ![alt text](assets/banner.jpg)
