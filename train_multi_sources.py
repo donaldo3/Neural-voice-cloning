@@ -1,8 +1,15 @@
 """Trainining script for seq2seq text-to-speech synthesis model.
+
 usage: train.py [options]
+
 options:
+    --device=<name>                 Which GPU to use
     --data-root=<dir>            Directory contains preprocessed features.
+    --data-root-single=<dir>     Directory contains preprocessed features for single speaker
+    --data-root-multi=<dir>      Directory contains preprocessed features for multi speaker
     --cmp-root=<dir>             Directory contains world cmp features.
+    --cmp-root-single=<dir>      Directory contains world cmp features for single speaker
+    --cmp-root-multi=<dir>       Directory contains world cmp features for multi speaker
     --checkpoint-dir=<dir>       Directory where to save model checkpoints [default: checkpoints].
     --hparams=<parmas>           Hyper parameters [default: ].
     --preset=<json>              Path of preset parameters (json).
@@ -12,7 +19,7 @@ options:
     --train-seq2seq-only         Train only seq2seq model.
     --train-postnet-only         Train only postnet model.
     --restore-parts=<path>       Restore part of the model.
-    --retrain-for-clarity        Option when we are retraining multiseaker TTS with single speaker DB for clarity improvement
+    --force-multispeaker        Option when we are retraining multiseaker TTS with single speaker DB for clarity improvement
     --log-event-path=<name>      Log event path.
     --reset-optimizer            Reset optimizer.
     --load-embedding=<path>      Load embedding from checkpoint.
@@ -94,12 +101,13 @@ def plot_alignment(alignment, path, info=None):
 
 
 class TextDataSource(FileDataSource):
-    def __init__(self, data_root, speaker_id=None):
+    def __init__(self, data_root, speaker_id=None, is_single=False):
         self.data_root = data_root
         self.speaker_ids = None
         self.multi_speaker = False
         # If not None, filter by speaker_id
         self.speaker_id = speaker_id
+        self.is_single = is_single
 
     def collect_files(self):
         meta = join(self.data_root, "train.txt")
@@ -109,11 +117,11 @@ class TextDataSource(FileDataSource):
         assert len(l) == 4 or len(l) == 5
         self.multi_speaker = len(l) == 5
         texts = list(map(lambda l: l.decode("utf-8").split("|")[3], lines))
-        if retrain_for_clarity:
+        if force_multispeaker and self.is_single:
             self.multi_speaker = True
 
         if self.multi_speaker:
-            if retrain_for_clarity:
+            if force_multispeaker and self.is_single:
                 speaker_ids = list(map(lambda l: int(hparams.n_speakers) - 1, lines))
             else:
                 speaker_ids = list(map(lambda l: int(l.decode("utf-8").split("|")[-1]), lines))
@@ -267,6 +275,7 @@ class WorldDataSource(_BinaryDataSource):
 
 class PartialyRandomizedSimilarTimeLengthSampler(Sampler):
     """Partially randmoized sampler
+
     1. Sort by lengths
     2. Pick a small patch and randomize it
     3. Permutate mini-batchs
@@ -1008,11 +1017,12 @@ def restore_parts(path, model):
 if __name__ == "__main__":
     args = docopt(__doc__)
     print("Command line args:\n", args)
+    device = args["--device"]
     checkpoint_dir = args["--checkpoint-dir"]
     checkpoint_path = args["--checkpoint"]
     checkpoint_seq2seq_path = args["--checkpoint-seq2seq"]
     checkpoint_postnet_path = args["--checkpoint-postnet"]
-    retrain_for_clarity = args["--retrain-for-clarity"] # Force multi-speaker
+    force_multispeaker = args["--force-multispeaker"] # Force multi-speaker
     load_embedding = args["--load-embedding"]
     checkpoint_restore_parts = args["--restore-parts"]
     speaker_id = args["--speaker-id"]
@@ -1020,9 +1030,11 @@ if __name__ == "__main__":
     preset = args["--preset"]
 
     data_root = args["--data-root"]
+    data_root_single = args["--data-root-single"]
+    data_root_multi = args["--data-root-multi"]
     cmp_root = args["--cmp-root"]
-    if data_root is None:
-        data_root = join(dirname(__file__), "data", "ljspeech")
+    cmp_root_single = args["--cmp-root-single"]
+    cmp_root_multi = args["--cmp-root-multi"]
 
     log_event_path = args["--log-event-path"]
     reset_optimizer = args["--reset-optimizer"]
@@ -1060,25 +1072,51 @@ if __name__ == "__main__":
 
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    # Input dataset definitions
-    X = FileSourceDataset(TextDataSource(data_root, speaker_id))
-    Mel = FileSourceDataset(MelSpecDataSource(data_root, speaker_id))
-    Y = FileSourceDataset(LinearSpecDataSource(data_root, speaker_id))
-    World = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root, data_root, speaker_id))
+    # Create dataset for single speaker
+    X_single = FileSourceDataset(TextDataSource(data_root_single, speaker_id, is_single=True))
+    Mel_single = FileSourceDataset(MelSpecDataSource(data_root_single, speaker_id))
+    Y_single = FileSourceDataset(LinearSpecDataSource(data_root_single, speaker_id))
+    World_single = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root_single, data_root_single, speaker_id))
+
+    # Create dataset for multi speaker
+    X_multi = FileSourceDataset(TextDataSource(data_root_multi, speaker_id))
+    Mel_multi = FileSourceDataset(MelSpecDataSource(data_root_multi, speaker_id))
+    Y_multi = FileSourceDataset(LinearSpecDataSource(data_root_multi, speaker_id))
+    World_multi = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root_multi, data_root_multi, speaker_id))
 
     # Prepare sampler
-    frame_lengths = Mel.file_data_source.frame_lengths
+    # TODO: update the frame_lengths for Y and World datasource even if it is never read. Just for consistency.
+    frame_lengths_single = Mel_single.file_data_source.frame_lengths
+    frame_lengths_multi = Mel_multi.file_data_source.frame_lengths
+    frame_lengths_single.extend(frame_lengths_multi)
+
+    # Merge single speaker dataset and multi speaker dataset
+    # Merge X.collected_files => ndarray of tuples of text and speaker id
+    collected_text_files = np.concatenate((X_single.collected_files, X_multi.collected_files))
+    X_single.collected_files = collected_text_files
+
+    # Merge Mel.collected_files
+    collected_mel_files = np.concatenate((Mel_single.collected_files, Mel_multi.collected_files))
+    Mel_single.collected_files = collected_mel_files
+
+    collected_Y_files = np.concatenate((Y_single.collected_files, Y_multi.collected_files))
+    Y_single.collected_files = collected_Y_files
+
+    collected_World_files = np.concatenate((World_single.collected_files, World_multi.collected_files))
+    World_single.collected_files = collected_World_files
+
+
     sampler = PartialyRandomizedSimilarTimeLengthSampler(
-        frame_lengths, batch_size=hparams.batch_size)
+        frame_lengths_single, batch_size=hparams.batch_size)
 
     # Dataset and Dataloader setup
-    dataset = PyTorchDataset(X, Mel, Y, World)
+    dataset_single = PyTorchDataset(X_single, Mel_single, Y_single, World_single)
     data_loader = data_utils.DataLoader(
-        dataset, batch_size=hparams.batch_size,
+        dataset_single, batch_size=hparams.batch_size,
         num_workers=hparams.num_workers, sampler=sampler,
         collate_fn=collate_fn, pin_memory=hparams.pin_memory)
 
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = torch.device(int(device) if use_cuda else "cpu")
 
     # Model
     model = build_model().to(device)
@@ -1113,8 +1151,8 @@ if __name__ == "__main__":
         if platform.system() == "Windows":
             log_event_path = "log/run-test" + \
                 str(datetime.now()).replace(" ", "_").replace(":", "_")
-        else:
-            log_event_path = "log/run-test" + str(datetime.now()).replace(" ", "_")
+        # else:
+        #     log_event_path = "log/run-test" + str(datetime.now()).replace(" ", "_")
     print("Log event path: {}".format(log_event_path))
     writer = SummaryWriter(log_dir=log_event_path)
 

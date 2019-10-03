@@ -2,7 +2,7 @@
 from deepvoice3_pytorch.frontend.text.symbols import symbols
 
 import nltk
-nltk.download('cmudict')
+#nltk.download('cmudict')
 from random import random
 
 n_vocab = len(symbols)
