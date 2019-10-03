@@ -314,7 +314,7 @@ class PartialyRandomizedSimilarTimeLengthSampler(Sampler):
 
 
 class PyTorchDataset(object):
-    def __init__(self, X, Mel, Y, World):
+    def __init__(self, X, Mel, Y, World=None):
         self.X = X
         self.Mel = Mel
         self.Y = Y
@@ -323,11 +323,18 @@ class PyTorchDataset(object):
         self.multi_speaker = X.file_data_source.multi_speaker
 
     def __getitem__(self, idx):
-        if self.multi_speaker:
-            text, speaker_id = self.X[idx]
-            return text, self.Mel[idx], self.Y[idx], self.World[idx], speaker_id
+        if self.World is not None:
+            if self.multi_speaker:
+                text, speaker_id = self.X[idx]
+                return text, self.Mel[idx], self.Y[idx], self.World[idx], speaker_id
+            else:
+                return self.X[idx], self.Mel[idx], self.Y[idx], self.World[idx]
         else:
-            return self.X[idx], self.Mel[idx], self.Y[idx], self.World[idx]
+            if self.multi_speaker:
+                text, speaker_id = self.X[idx]
+                return text, self.Mel[idx], self.Y[idx], None, speaker_id
+            else:
+                return self.X[idx], self.Mel[idx], self.Y[idx], None
 
     def __len__(self):
         return len(self.X)
@@ -366,6 +373,10 @@ class MaskedL1Loss(nn.Module):
 
 
 def collate_fn(batch):
+    if batch[0][3] is None:
+        world = False
+    else:
+        world = True
     """Create batch"""
     r = hparams.outputs_per_step
     downsample_step = hparams.downsample_step
@@ -407,9 +418,12 @@ def collate_fn(batch):
     y_batch = torch.FloatTensor(c)
 
     # Max_target_length padding for world cmp feature
-    d = np.array([_pad_2d(x[3], max_target_len, b_pad=b_pad) for x in batch],
-                 dtype=np.float32)
-    world_batch = torch.FloatTensor(d)
+    if world:
+        d = np.array([_pad_2d(x[3], max_target_len, b_pad=b_pad) for x in batch],
+                     dtype=np.float32)
+        world_batch = torch.FloatTensor(d)
+    else:
+        world_batch = None
 
     # text positions
     text_positions = np.array([_pad(np.arange(1, len(x[0]) + 1), max_input_len)
@@ -524,36 +538,36 @@ def save_states(global_step, writer, mel_outputs, linear_outputs, attn, mel, y,
         for i, alignment in enumerate(attn):
             alignment = alignment[idx].cpu().data.numpy()
             tag = "alignment_layer{}".format(i + 1)
-            writer.add_image(tag, np.uint8(cm.viridis(np.flip(alignment, 1).T) * 255), global_step)
+            writer.add_image(tag, torch.from_numpy(np.uint8(cm.viridis(np.flip(alignment, 1).T) * 255)).permute(2,0,1), global_step)
 
             # save files as well for now
             alignment_dir = join(checkpoint_dir, "alignment_layer{}".format(i + 1))
             os.makedirs(alignment_dir, exist_ok=True)
             path = join(alignment_dir, "step{:09d}_layer_{}_alignment.png".format(
                 global_step, i + 1))
-            save_alignment(path, alignment)
+            #save_alignment(path, alignment)
 
         # Save averaged alignment
         alignment_dir = join(checkpoint_dir, "alignment_ave")
         os.makedirs(alignment_dir, exist_ok=True)
         path = join(alignment_dir, "step{:09d}_alignment.png".format(global_step))
         alignment = attn.mean(0)[idx].cpu().data.numpy()
-        save_alignment(path, alignment)
+        #save_alignment(path, alignment)
 
         tag = "averaged_alignment"
-        writer.add_image(tag, np.uint8(cm.viridis(np.flip(alignment, 1).T) * 255), global_step)
+        writer.add_image(tag, torch.from_numpy(np.uint8(cm.viridis(np.flip(alignment, 1).T) * 255)).permute(2,0,1), global_step)
 
     # Predicted mel spectrogram
     if mel_outputs is not None:
         mel_output = mel_outputs[idx].cpu().data.numpy()
         mel_output = prepare_spec_image(audio._denormalize(mel_output))
-        writer.add_image("Predicted mel spectrogram", mel_output, global_step)
+        writer.add_image("Predicted mel spectrogram", torch.from_numpy(mel_output).permute(2,0,1), global_step)
 
     # Predicted spectrogram
     if linear_outputs is not None:
         linear_output = linear_outputs[idx].cpu().data.numpy()
         spectrogram = prepare_spec_image(audio._denormalize(linear_output))
-        writer.add_image("Predicted linear spectrogram", spectrogram, global_step)
+        writer.add_image("Predicted linear spectrogram", torch.from_numpy(spectrogram).permute(2,0,1), global_step)
 
         # Predicted audio signal
         signal = audio.inv_spectrogram(linear_output.T)
@@ -571,13 +585,13 @@ def save_states(global_step, writer, mel_outputs, linear_outputs, attn, mel, y,
     if mel_outputs is not None:
         mel_output = mel[idx].cpu().data.numpy()
         mel_output = prepare_spec_image(audio._denormalize(mel_output))
-        writer.add_image("Target mel spectrogram", mel_output, global_step)
+        writer.add_image("Target mel spectrogram", torch.from_numpy(mel_output).permute(2,0,1), global_step)
 
     # Target spectrogram
     if linear_outputs is not None:
         linear_output = y[idx].cpu().data.numpy()
         spectrogram = prepare_spec_image(audio._denormalize(linear_output))
-        writer.add_image("Target linear spectrogram", spectrogram, global_step)
+        writer.add_image("Target linear spectrogram", torch.from_numpy(spectrogram).permute(2,0,1), global_step)
 
 
 def logit(x, eps=1e-8):
@@ -835,19 +849,20 @@ Please set a larger value for ``max_position`` in hyper parameters.""".format(
             # Save checkpoint, states
             if global_step > 0 and global_step % checkpoint_interval == 0:
                 if hparams.vocoder == "world":
+                    save_checkpoint(
+                        model, optimizer, global_step, checkpoint_dir, global_epoch,
+                        train_seq2seq, train_postnet)
                     save_states(
                         global_step, writer, mel_outputs, None, attn,
                         mel, None, input_lengths, checkpoint_dir)
-                    save_checkpoint(
-                        model, optimizer, global_step, checkpoint_dir, global_epoch,
-                        train_seq2seq, train_postnet)
+
                 else:
-                    save_states(
-                        global_step, writer, mel_outputs, postnet_outputs, attn,
-                        mel, y, input_lengths, checkpoint_dir)
                     save_checkpoint(
                         model, optimizer, global_step, checkpoint_dir, global_epoch,
                         train_seq2seq, train_postnet)
+                    save_states(
+                        global_step, writer, mel_outputs, None, attn,
+                        mel, None, input_lengths, checkpoint_dir)
 
             # evaluate
             # TODO: uncomment after implementing synthesis using world vocoder
@@ -1066,7 +1081,10 @@ if __name__ == "__main__":
     X = FileSourceDataset(TextDataSource(data_root, speaker_id))
     Mel = FileSourceDataset(MelSpecDataSource(data_root, speaker_id))
     Y = FileSourceDataset(LinearSpecDataSource(data_root, speaker_id))
-    World = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root, data_root, speaker_id))
+    if cmp_root is not None:
+        World = FileSourceDataset(WorldDataSourceForBCEOnVuv(cmp_root, data_root, speaker_id))
+    else:
+        World = None
 
     # Prepare sampler
     frame_lengths = Mel.file_data_source.frame_lengths
@@ -1074,7 +1092,10 @@ if __name__ == "__main__":
         frame_lengths, batch_size=hparams.batch_size)
 
     # Dataset and Dataloader setup
-    dataset = PyTorchDataset(X, Mel, Y, World)
+    if World is not None:
+        dataset = PyTorchDataset(X, Mel, Y, World)
+    else:
+        dataset = PyTorchDataset(X, Mel, Y)
     data_loader = data_utils.DataLoader(
         dataset, batch_size=hparams.batch_size,
         num_workers=hparams.num_workers, sampler=sampler,
