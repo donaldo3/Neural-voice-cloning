@@ -3,3 +3,20 @@
  (fail)m2: the one with BCELoss for vuv, 80 dim mel, 25 dB trimming (mistake: cmp root for converter training has been pointing to the mgc of 15 dB trimmed wav (s2)), vuv weight 0.4, 256 dim speaker embedding
  m3: the one with BCELoss for vuv, 80 dim mel, 25 dB trimming, s3 for mgc, vuv weight 0.4, 256 dim speaker embedding
     - This has problem with clarity of pronunciation
+ m4: the one with multi data source. VCTK 102 speakers and LJSpeech training set. speaker embedding dimension is 256.
+  Other settings are the same as m3.
+     - Improved intonation. Probably due to the rich intonation of LJSpeech
+     - Clarity has not been improved.
+     - Speaker similarity has been improved
+     - Speech quality is lower than m3 probably because of low speaker dimension.
+     - Training automatically ended at 3420000 steps.
+     - WORLD vocoder is used and strangely proportional phase on time domain
+
+
+ m5: This is trained on LibriTTS DB of 1511 speakers (460 hours of clean training data)
+     - Clarity is satisfiable
+     - Speaker similarity is also satisfiable
+     - Speaker embedding 256 dimension
+     - I stopped training at 4150000 step
+     - Griffin-Lim converter is trained instead of WORLD
+
