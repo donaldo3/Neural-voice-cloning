@@ -48,7 +48,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils import data as data_utils
 from torch.utils.data.sampler import Sampler
 import numpy as np
-from speaker_encoder.speaker_encoder3 import SpeakerEncoder
+from speaker_encoder.speaker_encoder2 import SpeakerEncoder
 from numba import jit
 
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
@@ -195,25 +195,49 @@ class SpeakerDataSet(Dataset):
         self.data_root = data_root
         self.train_speaker_id_list = []
         self.mel_spec_datasource_list = []
+        self.black_list_speaker_ids = []
+        if vctk_root is not None:
+            speakers = vctk.available_speakers
+            td = vctk.TranscriptionDataSource(vctk_root, speakers=speakers)
+            transcriptions = td.collect_files()
+            speaker_ids = td.labels # All speakers except for p315
+            self.speaker_to_speaker_id = td.labelmap
 
-        speakers = vctk.available_speakers
-        td = vctk.TranscriptionDataSource(vctk_root, speakers=speakers)
-        transcriptions = td.collect_files()
-        speaker_ids = td.labels # All speakers except for p315
-        self.speaker_to_speaker_id = td.labelmap
-
-        # Create lists of training speaker_ids
-        black_list_speaker = hparams.not_for_train_speaker.split(", ")
-        self.black_list_speaker_ids = [self.speaker_to_speaker_id[i] for i in black_list_speaker]
-        speaker_ids = np.unique(speaker_ids).tolist()
-        for i in self.black_list_speaker_ids:
-            speaker_ids.remove(i)
-        self.train_speaker_id_list = speaker_ids
+            # Create lists of training speaker_ids
+            black_list_speaker = hparams.not_for_train_speaker.split(", ")
+            self.black_list_speaker_ids = [self.speaker_to_speaker_id[i] for i in black_list_speaker]
+            speaker_ids = np.unique(speaker_ids).tolist()
+            for i in self.black_list_speaker_ids:
+                speaker_ids.remove(i)
+            self.train_speaker_id_list = speaker_ids
+        else:
+            self.speaker_to_speaker_id = {}
+            meta_file = os.path.join(data_root, 'speaker_id_to_speaker.txt')
+            ids = []
+            with open(meta_file, 'r') as f:
+                lines = f.readlines()
+            for line in lines:
+                id = int(line.split('|')[0])
+                speaker = line.split('|')[1]
+                ids.append(id)
+                self.speaker_to_speaker_id[speaker] = id
 
         # Assuming self.speaker_list contains speaker_ids of training speakers
-        for spkr_id in self.train_speaker_id_list:
+        for spkr_id in ids:
+            speaker = self.speaker_to_speaker_id
             Mel = FileSourceDataset(MelSpecDataSource(data_root, speaker_id=spkr_id))
-            self.mel_spec_datasource_list.append(Mel)
+
+            if len(Mel.file_data_source.frame_lengths) < hparams.cloning_sample_size:
+                self.black_list_speaker_ids.append(spkr_id)
+                continue
+            else:
+                self.mel_spec_datasource_list.append(Mel)
+        self.train_speaker_id_list = [x for x in ids if x not in self.black_list_speaker_ids]
+        meta_file2 = os.path.join(data_root, 'speaker_ids_excluded_from_training.txt')
+        with open(meta_file2, 'w', encoding='utf-8') as f:
+            for x in self.black_list_speaker_ids:
+                f.write(str(x)+'\n')
+
 
     '''
     Return MelSpecDataSource of desired speaker idx
@@ -296,13 +320,25 @@ class PyTorchDataset(Dataset):
 
         # Create embedding tensor with black list embeddings removed
         black_list_id = speaker_data_source.black_list_speaker_ids
-        list_embedding = [elem for elem in pretrained_embedding]
+        dict_embedding = {}
+        for i in range(len(pretrained_embedding)):
+            dict_embedding[i] = pretrained_embedding[i]
             #pretrained_embedding.tolist()
-        start = black_list_id[0]
-        end = black_list_id[-1] +1
 
-        del list_embedding[start:end] # TODO: black list must be continuously selected
+        # start = black_list_id[0]
+        # end = black_list_id[-1] +1
+        #
+        # del list_embedding[start:end] # TODO: black list must be continuously selected
+        #
+
+        for id in black_list_id:
+            del dict_embedding[id]
+        list_embedding = []
+        for key in sorted(dict_embedding):
+            list_embedding.append(dict_embedding[key])
+
         tensor_embedding = torch.stack(list_embedding)
+        assert len(tensor_embedding) == len(speaker_data_source.mel_spec_datasource_list)
 
         # Create speaker_embedding and copy the tensor from above
 
@@ -311,6 +347,10 @@ class PyTorchDataset(Dataset):
                                            std=hparams.speaker_embedding_weight_std
                                            )
         self.speaker_embedding.weight.data.copy_(tensor_embedding)
+        # self.speaker_embedding = Embedding(num_embeddings=pretrained_embedding.size()[0],
+        #                                    embedding_dim=hparams.speaker_embed_dim, padding_idx=None,
+        #                                    std=hparams.speaker_embedding_weight_std)
+        # self.speaker_embedding.weight.data.copy_(pretrained_embedding)
 
     '''
     Return FileSourceDatas of n_batch speakers and speaker embedding from TTS(2D: batch, d_emb)
@@ -359,7 +399,10 @@ if __name__ == "__main__":
         collate_fn=collate_fn,
         pin_memory=False
     )
-    device = torch.device(int(device))
+    if device is None:
+        device = torch.device("cuda" if use_cuda else "cpu")
+    else:
+        device = torch.device(int(device))
     model = SpeakerEncoder(hparams.num_mels, hparams.encoder_channels, hparams.kernel_size,
                            hparams.f_mapped, hparams.speaker_embed_dim,
                            hparams.speaker_encoder_attention_num_heads,

@@ -200,7 +200,8 @@ if __name__ == "__main__":
     Run speaker encoder and generate new speaker embedding
     '''
     cloning_samples = cloning_samples.to(device)
-    speaker_encoder_model.cuda()
+    if use_cuda:
+        speaker_encoder_model.cuda()
     pred_speaker_embeddings = speaker_encoder_model(cloning_samples)
 
     '''
