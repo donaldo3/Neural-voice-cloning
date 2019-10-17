@@ -3,6 +3,7 @@ import torch.nn as nn
 import math
 
 from deepvoice3_pytorch.modules import Conv1dGLU
+from hparams import hparams as hp
 
 class FC_ELU(nn.Module):
     def __init__(self, in_dim, hidden_units):
@@ -182,7 +183,7 @@ class SpeakerEncoder(nn.Module):
             sample_embeddings.append(sample_embedding)
         sample_embeddings = torch.stack(sample_embeddings)
 
-        time_aggregated = sample_embeddings.view(-1, self.cloning_sample_size, self.f_mapped)
+        time_aggregated = sample_embeddings.view(hp.batch_size, self.cloning_sample_size, self.f_mapped)
         attn_weights = self.sample_attn(time_aggregated)
         cloning_samples = self.cloning_sample_prj(time_aggregated)
 

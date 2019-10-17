@@ -48,7 +48,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils import data as data_utils
 from torch.utils.data.sampler import Sampler
 import numpy as np
-from speaker_encoder.speaker_encoder2 import SpeakerEncoder
+from speaker_encoder.speaker_encoder3 import SpeakerEncoder
 from numba import jit
 
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
@@ -109,7 +109,7 @@ def train(device, model, data_loader, optimizer, writer,
           checkpoint_dir=None, checkpoint_interval=10000, nepochs=None,
           clip_thresh=1.0):
     current_lr = init_lr
-    MSELoss = nn.MSELoss()
+    L1Loss = nn.L1Loss()
 
     global global_step, global_epoch
     while global_epoch < nepochs:
@@ -126,8 +126,8 @@ def train(device, model, data_loader, optimizer, writer,
             optimizer.zero_grad()
 
             # Downsample if necessary
-            # if downsample_step > 1:
-            #     mel = mel[:, 0::downsample_step, :].contiguous()
+            if hparams.downsample_step > 1:
+                mel = mel[:, 0::hparams.downsample_step, :].contiguous()
 
             # Change into 3D
             size = mel.size()
@@ -141,8 +141,8 @@ def train(device, model, data_loader, optimizer, writer,
             # Apply model
             pred_speaker_embeddings = model(mel)
 
-            # L2 Loss with embeddings from generative model
-            loss = MSELoss(pred_speaker_embeddings, tts_embeddings.squeeze())
+            # L1 Loss with embeddings from generative model
+            loss = L1Loss(pred_speaker_embeddings, tts_embeddings.squeeze())
 
             # Update
             loss.backward()
