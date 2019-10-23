@@ -27,6 +27,7 @@ def deepvoice3(n_vocab, embed_dim=256, mel_dim=80, linear_dim=513, r=4,
                window_backward=1,
                key_projection=False,
                value_projection=False,
+               vocoder=""
                ):
     """Build deepvoice3
     """

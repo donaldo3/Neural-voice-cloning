@@ -109,7 +109,7 @@ def train(device, model, data_loader, optimizer, writer,
           checkpoint_dir=None, checkpoint_interval=10000, nepochs=None,
           clip_thresh=1.0):
     current_lr = init_lr
-    L1Loss = nn.L1Loss()
+    mse_loss = nn.MSELoss()
 
     global global_step, global_epoch
     while global_epoch < nepochs:
@@ -125,9 +125,9 @@ def train(device, model, data_loader, optimizer, writer,
                     param_group['lr'] = current_lr
             optimizer.zero_grad()
 
-            # Downsample if necessary
-            if hparams.downsample_step > 1:
-                mel = mel[:, 0::hparams.downsample_step, :].contiguous()
+            # Downsample degrades temporal resolution
+            # if hparams.downsample_step > 1:
+            #     mel = mel[:, :, 0::hparams.downsample_step,:].contiguous()
 
             # Change into 3D
             size = mel.size()
@@ -142,7 +142,7 @@ def train(device, model, data_loader, optimizer, writer,
             pred_speaker_embeddings = model(mel)
 
             # L1 Loss with embeddings from generative model
-            loss = L1Loss(pred_speaker_embeddings, tts_embeddings.squeeze())
+            loss = mse_loss(pred_speaker_embeddings, tts_embeddings.squeeze())
 
             # Update
             loss.backward()

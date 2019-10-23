@@ -219,6 +219,8 @@ if __name__ == "__main__":
 
     # Save new_embedding
     dir = checkpoint_speaker_embedding
+    if not os.path.isdir(dir):
+        os.makedirs(dir)
     id = pretrained_embedding.data.size()[0]
     checkpoint_path = os.path.join(dir, speaker_meta +  "_" + str(id) + ".tar")
     torch.save(
