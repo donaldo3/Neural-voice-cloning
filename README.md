@@ -1,4 +1,6 @@
-Korean branch for emotiontts project
+# Samples
+Target: https://www.dropbox.com/s/s1s3wb0cg2t74cn/100_121669_000001_000000.wav?dl=1
+Clone: https://www.dropbox.com/s/0v6fz6m71dkz6ht/0_checkpoint_step004150000.wav?dl=0
 # Neural voice cloning by Sunghee Jung
 ## 1. How to train
 You need to train 1) Multi-speaker tts and 2) Speaker encoder.
